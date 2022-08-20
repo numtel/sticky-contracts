@@ -4,10 +4,10 @@ pragma solidity ^0.8.13;
 import "./IERC20.sol";
 import "./IPool.sol";
 // TODO Ownable superclass causing deployment error?
-//import "./Ownable.sol";
+import "./Ownable.sol";
 import "./safeTransfer.sol";
 
-contract StickyInterestSkimmer /*is Ownable*/ {
+contract StickyInterestSkimmer is Ownable {
   uint public creatorTotalSupply;
   mapping(address => uint) public creatorBalanceOf;
 
@@ -33,6 +33,7 @@ contract StickyInterestSkimmer /*is Ownable*/ {
     aToken = _aToken;
     baseToken = _baseToken;
     investorProportion = _investorProportion;
+    _transferOwnership(msg.sender);
     //owner = msg.sender;
   }
 
@@ -65,13 +66,13 @@ contract StickyInterestSkimmer /*is Ownable*/ {
   }
 
   // Owner invokes for content creators, acting as oracle
-  function mint(address account, uint amount) external /*onlyOwner*/ {
+  function mint(address account, uint amount) external onlyOwner {
     creatorBalanceOf[account] += amount;
     creatorTotalSupply += amount;
   }
 
   // Owner invokes for content creators, acting as oracle
-  function burn(address account, uint amount) external /*onlyOwner*/ {
+  function burn(address account, uint amount) external onlyOwner {
     creatorBalanceOf[account] -= amount;
     creatorTotalSupply -= amount;
   }
@@ -88,13 +89,13 @@ contract StickyInterestSkimmer /*is Ownable*/ {
   }
 
   // Administrative only
-  function transferOwnership(address newOwner) external /*onlyOwner*/ {
+  function transferOwnership(address newOwner) external onlyOwner {
     //owner = newOwner;
   }
 
   // Administrative only
   // XXX: Any pending (unclaimed) interest will be modified by this function
-  function setInvestorProportion(uint32 newValue) external /*onlyOwner*/ {
+  function setInvestorProportion(uint32 newValue) external onlyOwner {
     investorProportion = newValue;
   }
 
