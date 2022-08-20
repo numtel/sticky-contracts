@@ -7,7 +7,7 @@ contract MockAToken {
   uint public totalSupply;
   uint public scaledTotalSupply;
 
-  mapping(address => uint) public balanceOf;
+  mapping(address => uint) public _balanceOf;
 
   constructor(
     uint _scaleNumerator,
@@ -18,7 +18,7 @@ contract MockAToken {
   }
 
   function mint(address user, uint amount) external {
-    balanceOf[user] += amount;
+    _balanceOf[user] += amount;
     totalSupply += amount;
     //updateScaledSupply();
   }
@@ -31,7 +31,12 @@ contract MockAToken {
     scaledTotalSupply = (totalSupply * scaleNumerator) / scaleDenominator;
   }
 
+  function balanceOf(address user) external view returns (uint) {
+    return (_balanceOf[user] * scaleNumerator) / scaleDenominator;
+  }
+
+  // XXX nyi
   function scaledBalanceOf(address user) external view returns (uint) {
-    return (balanceOf[user] * scaleNumerator) / scaleDenominator;
+    return (_balanceOf[user] * scaleNumerator) / scaleDenominator;
   }
 }

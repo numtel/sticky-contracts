@@ -4,7 +4,7 @@ exports.canInvestAndWithdraw = async function({
   web3, accounts, deployContract, loadContract, throws, BURN_ACCOUNT, increaseTime,
 }) {
   const mockToken = await deployContract(accounts[0], 'MockERC20');
-  const mockAToken = await deployContract(accounts[0], 'MockAToken', 9, 10);
+  const mockAToken = await deployContract(accounts[0], 'MockAToken', 10, 10);
   const mockPool = await deployContract(accounts[0], 'MockPool',
     mockToken.options.address, mockAToken.options.address);
 
@@ -20,6 +20,17 @@ exports.canInvestAndWithdraw = async function({
   await skimmer.sendFrom(accounts[0]).deposit(INVESTOR_AMOUNT);
 
   assert.strictEqual(await mockToken.methods.balanceOf(accounts[0]).call(), '0');
+
+  assert.strictEqual(Number(await mockAToken.methods.balanceOf(skimmer.options.address).call()), INVESTOR_AMOUNT);
+
+  await mockAToken.sendFrom(accounts[0]).setScaleNumerator(11);
+
+  assert.strictEqual(Number(await mockAToken.methods.balanceOf(skimmer.options.address).call()), INVESTOR_AMOUNT * 1.1);
+
+  await skimmer.sendFrom(accounts[0]).mint(accounts[1], 100);
+
+  assert.strictEqual(Number(await skimmer.methods.creatorAvailable(accounts[1]).call()), INVESTOR_AMOUNT * 0.1);
+
 
   // Can't withdraw more than deposited
   assert.strictEqual(await throws(() =>
