@@ -14,6 +14,8 @@ contract StickyInterestSkimmer is Ownable {
   uint public investorTotalSupply;
   mapping(address => uint) public investorBalanceOf;
 
+  bytes32[] public epochRoots;
+
   IPool public pool;
   // The Aave token
   IERC20 public aToken;
@@ -99,4 +101,40 @@ contract StickyInterestSkimmer is Ownable {
     investorProportion = newValue;
   }
 
+  // From https://github.com/miguelmota/merkletreejs-solidity
+  function verify(
+    bytes32 root,
+    bytes32 leaf,
+    bytes32[] memory proof
+  )
+    internal
+    pure
+    returns (bool)
+  {
+    bytes32 computedHash = leaf;
+
+    for (uint256 i = 0; i < proof.length; i++) {
+      bytes32 proofElement = proof[i];
+
+      if (computedHash <= proofElement) {
+        // Hash(current computed hash + current element of the proof)
+        computedHash = keccak256(abi.encodePacked(computedHash, proofElement));
+      } else {
+        // Hash(current element of the proof + current computed hash)
+        computedHash = keccak256(abi.encodePacked(proofElement, computedHash));
+      }
+    }
+
+    // Check if the computed hash (root) is equal to the provided root
+    return computedHash == root;
+  }
+
+  function publishEpochRoot(bytes32 root) external onlyOwner {
+    epochRoots.push(root);
+  }
+
+  function claimValid(uint epoch, uint share, bytes32[] memory proof) external view returns(bool) {
+    bytes32 leaf = keccak256(abi.encodePacked(msg.sender, share));
+    return verify(epochRoots[epoch], leaf, proof);
+  }
 }

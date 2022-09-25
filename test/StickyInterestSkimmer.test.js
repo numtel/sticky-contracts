@@ -1,4 +1,6 @@
 const assert = require('assert');
+const {MerkleTree} = require('merkletreejs');
+const keccak256 = require('keccak256');
 
 exports.canInvestAndWithdraw = async function({
   web3, accounts, deployContract, loadContract, throws, BURN_ACCOUNT, increaseTime,
@@ -41,3 +43,48 @@ exports.canInvestAndWithdraw = async function({
 
 
 };
+
+
+exports.merkleClaim = async function({
+  web3, accounts, deployContract, loadContract, throws, BURN_ACCOUNT, increaseTime,
+}) {
+  const mockToken = await deployContract(accounts[0], 'MockERC20');
+  const mockAToken = await deployContract(accounts[0], 'MockAToken', 10, 10);
+  const mockPool = await deployContract(accounts[0], 'MockPool',
+    mockToken.options.address, mockAToken.options.address);
+
+  const skimmer = await deployContract(accounts[0], 'StickyInterestSkimmer',
+    mockPool.options.address,
+    mockAToken.options.address,
+    mockToken.options.address,
+    0);
+
+  const leafData = [
+    { acct: accounts[1], share: 100 },
+    { acct: accounts[2], share: 200 },
+    { acct: accounts[3], share: 300 },
+    { acct: accounts[4], share: 400 },
+  ];
+  const leaves = leafData.map(leaf => keccak256(
+    Buffer.from(web3.utils.encodePacked(
+      {value: leaf.acct, type:'address'},
+      {value: leaf.share, type:'uint256'}
+    ).slice(2), 'hex')
+  ));
+
+  // Generate the tree
+  const tree = new MerkleTree(leaves, keccak256, {sort:true});
+  const root = tree.getHexRoot();
+
+  // Publish the epoch merkle root
+  await skimmer.sendFrom(accounts[0]).publishEpochRoot(root);
+
+
+  for(let i = 0; i < leafData.length; i++) {
+    // Claim is valid with the correct share value
+    assert.strictEqual(await skimmer.methods.claimValid(0, leafData[0].share, tree.getHexProof(leaves[0])).call({from:leafData[0].acct}), true);
+    // Claim fails when the share value does not match
+    assert.strictEqual(await skimmer.methods.claimValid(0, leafData[0].share * 2, tree.getHexProof(leaves[0])).call({from:leafData[0].acct}), false);
+  }
+
+}
