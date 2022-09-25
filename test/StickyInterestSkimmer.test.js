@@ -82,9 +82,9 @@ exports.merkleClaim = async function({
 
   for(let i = 0; i < leafData.length; i++) {
     // Claim is valid with the correct share value
-    assert.strictEqual(await skimmer.methods.claimValid(0, leafData[0].share, tree.getHexProof(leaves[0])).call({from:leafData[0].acct}), true);
+    assert.strictEqual(await skimmer.methods.claimValid(0, leafData[i].share, tree.getHexProof(leaves[i])).call({from:leafData[i].acct}), true);
     // Claim fails when the share value does not match
-    assert.strictEqual(await skimmer.methods.claimValid(0, leafData[0].share * 2, tree.getHexProof(leaves[0])).call({from:leafData[0].acct}), false);
+    assert.strictEqual(await skimmer.methods.claimValid(0, leafData[i].share * 2, tree.getHexProof(leaves[i])).call({from:leafData[i].acct}), false);
   }
 
 }
