@@ -35,6 +35,10 @@ contract StickyAavePool is ERC20 {
     aavePool.withdraw(baseToken, amountOut, msg.sender);
   }
 
+  function interestToken() public view returns(address) {
+    return baseToken;
+  }
+
   function interestAvailable() public view returns(uint) {
     return ERC20(aToken).balanceOf(address(this)) - totalSupply;
   }

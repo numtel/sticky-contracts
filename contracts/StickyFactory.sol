@@ -6,12 +6,13 @@ import "./Ownable.sol";
 import "./safeTransfer.sol";
 
 interface ISwapHelper {
+  function inputToken() external view returns(address);
+  function outputToken() external view returns(address);
   function swap(address recipient) external;
 }
 
 interface IStickyPool {
-  // TODO integrate swap helpers so that the base token doesn't matter
-  function baseToken() external view returns(address);
+  function interestToken() external view returns(address);
   function interestAvailable() external view returns(uint);
   function collectInterest() external;
 }
@@ -35,7 +36,7 @@ contract StickyFactory is Ownable {
   event OracleChanged(address indexed oldOracle, address indexed newOracle);
   event RewardTokenChanged(address indexed oldRewardToken, address indexed newRewardToken);
   event SwapHelperChanged(address indexed oldHelper, address indexed newHelper);
-  event NewPool(address indexed stickyPool, address indexed baseToken, address indexed swapHelper);
+  event NewPool(address indexed stickyPool, address indexed interestToken, address indexed swapHelper);
 
   constructor(IERC20 _rewardToken) {
     rewardToken = _rewardToken;
@@ -55,7 +56,7 @@ contract StickyFactory is Ownable {
   ) external onlyOwner {
     pools.push(newPool);
     poolSwappers.push(swapHelper);
-    emit NewPool(address(newPool), newPool.baseToken(), address(swapHelper));
+    emit NewPool(address(newPool), newPool.interestToken(), address(swapHelper));
   }
 
   function setSwapHelper(uint poolIndex, ISwapHelper newSwapHelper) external onlyOwner {
@@ -87,7 +88,7 @@ contract StickyFactory is Ownable {
     for(uint i = poolStart; i<poolCount; i++) {
       uint poolEarned = pools[i].interestAvailable();
       pools[i].collectInterest();
-      safeTransfer.invoke(pools[i].baseToken(), address(poolSwappers[i]), poolEarned);
+      safeTransfer.invoke(pools[i].interestToken(), address(poolSwappers[i]), poolEarned);
       poolSwappers[i].swap(address(this));
     }
     epochInterest[epochIndex] += rewardToken.balanceOf(address(this)) - rewardBefore;

@@ -4,22 +4,22 @@ pragma solidity ^0.8.13;
 import "./MockERC20.sol";
 
 contract MockSwapHelper {
-  address public fromToken;
-  address public toToken;
+  address public inputToken;
+  address public outputToken;
   uint public ratio;
 
   constructor(
-    address _fromToken,
-    address _toToken,
+    address _inputToken,
+    address _outputToken,
     uint _ratio
   ) {
-    fromToken = _fromToken;
-    toToken = _toToken;
+    inputToken = _inputToken;
+    outputToken = _outputToken;
     ratio = _ratio;
   }
 
   function swap(address recipient) external {
-    uint amountIn = MockERC20(fromToken).balanceOf(address(this));
-    MockERC20(toToken).mint(recipient, amountIn * ratio);
+    uint amountIn = MockERC20(inputToken).balanceOf(address(this));
+    MockERC20(outputToken).mint(recipient, amountIn * ratio);
   }
 }
