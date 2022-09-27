@@ -62,7 +62,8 @@ exports.canInvestAndWithdraw = async function({
   const root = tree.getHexRoot();
 
   // Publish the epoch merkle root
-  await factory.sendFrom(accounts[0]).initiateEpoch(root, epochTotal);
+  await factory.sendFrom(accounts[0]).defineEpoch(root, epochTotal);
+  await factory.sendFrom(accounts[0]).collectInterest(0, 0, 100);
 
   // Interest was collected in factory
   assert.strictEqual(

@@ -63,21 +63,34 @@ contract StickyFactory is Ownable {
     poolSwappers[poolIndex] = newSwapHelper;
   }
 
-  function initiateEpoch(bytes32 epochRoot, uint epochTotal) external {
+  function defineEpoch(bytes32 epochRoot, uint epochTotal) external {
     require(msg.sender == oracle);
     epochRoots.push(epochRoot);
     epochTotals.push(epochTotal);
+    epochInterest.push(0);
+  }
+
+  // Perform interest swapping for a subset of pools,
+  //  can never be too careful about the block gas limit
+  // Generally, should always be collecting into the latest epoch,
+  //  immediately after defining it
+  function collectInterest(uint epochIndex, uint poolStart, uint poolCount) external {
+    require(msg.sender == oracle);
 
     // Swap each pool interest into rewards token
     uint rewardBefore = rewardToken.balanceOf(address(this));
-    // TODO allow multiple pool subsets just in case we get too many for the block gas limit
-    for(uint i = 0; i<pools.length; i++) {
+
+    if(poolCount > pools.length) {
+      poolCount = pools.length;
+    }
+
+    for(uint i = poolStart; i<poolCount; i++) {
       uint poolEarned = pools[i].interestAvailable();
       pools[i].collectInterest();
       safeTransfer.invoke(pools[i].baseToken(), address(poolSwappers[i]), poolEarned);
       poolSwappers[i].swap(address(this));
     }
-    epochInterest.push(rewardToken.balanceOf(address(this)) - rewardBefore);
+    epochInterest[epochIndex] += rewardToken.balanceOf(address(this)) - rewardBefore;
   }
 
   function setOracleAccount(address newOracle) external onlyOwner {
