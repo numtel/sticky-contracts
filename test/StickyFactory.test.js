@@ -11,19 +11,23 @@ exports.canInvestAndWithdraw = async function({
   const swapHelper = await deployContract(accounts[0], 'MockSwapHelper',
     mockToken.options.address, rewardToken.options.address, REWARD_RATIO);
   const mockAToken = await deployContract(accounts[0], 'MockAToken', 10, 10);
-  const mockPool = await deployContract(accounts[0], 'MockPool',
+  const mockAavePool = await deployContract(accounts[0], 'MockPool',
     mockToken.options.address, mockAToken.options.address);
 
   const factory = await deployContract(accounts[0], 'StickyFactory',
     rewardToken.options.address);
 
-  const result = await factory.sendFrom(accounts[0]).createPool(
-    mockPool.options.address,
+  const pool = await deployContract(accounts[0], 'StickyAavePool',
+    mockAavePool.options.address,
     mockAToken.options.address,
     mockToken.options.address,
+    factory.options.address,
+  );
+
+  const result = await factory.sendFrom(accounts[0]).addPool(
+    pool.options.address,
     swapHelper.options.address
   );
-  const pool = await loadContract('StickyPool', result.events.NewPool.returnValues.stickyPool);
 
   const INVESTOR_AMOUNT = 10000;
   await mockToken.sendFrom(accounts[0]).mint(accounts[0], INVESTOR_AMOUNT);

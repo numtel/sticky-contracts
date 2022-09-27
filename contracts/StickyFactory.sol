@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "./ERC20.sol";
-import "./IPool.sol";
+import "./IERC20.sol";
 import "./Ownable.sol";
 import "./safeTransfer.sol";
 
@@ -10,11 +9,17 @@ interface ISwapHelper {
   function swap(address recipient) external;
 }
 
+interface IStickyPool {
+  function baseToken() external view returns(address);
+  function interestAvailable() external view returns(uint);
+  function collectInterest() external;
+}
+
 contract StickyFactory is Ownable {
-  StickyPool[] public pools;
+  IStickyPool[] public pools;
   ISwapHelper[] public poolSwappers;
   mapping(address => uint) public lastClaimedEpochOf;
-  ERC20 public rewardToken;
+  IERC20 public rewardToken;
   bytes32[] public epochRoots;
   uint[] public epochTotals;
   uint[] public epochInterest;
@@ -31,28 +36,25 @@ contract StickyFactory is Ownable {
   event SwapHelperChanged(address indexed oldHelper, address indexed newHelper);
   event NewPool(address indexed stickyPool, address indexed baseToken, address indexed swapHelper);
 
-  constructor(ERC20 _rewardToken) {
+  constructor(IERC20 _rewardToken) {
     rewardToken = _rewardToken;
     _transferOwnership(msg.sender);
     oracle = msg.sender;
   }
 
   // Be sure to update all swapHelpers to match before initiating next epoch
-  function setRewardToken(ERC20 newRewardToken) external onlyOwner {
+  function setRewardToken(IERC20 newRewardToken) external onlyOwner {
     emit RewardTokenChanged(address(rewardToken), address(newRewardToken));
     rewardToken = newRewardToken;
   }
 
-  function createPool(
-    IPool aavePool,
-    address aToken,
-    address baseToken,
+  function addPool(
+    IStickyPool newPool,
     ISwapHelper swapHelper
   ) external onlyOwner {
-    StickyPool newPool = new StickyPool(aavePool, aToken, baseToken);
     pools.push(newPool);
     poolSwappers.push(swapHelper);
-    emit NewPool(address(newPool), baseToken, address(swapHelper));
+    emit NewPool(address(newPool), newPool.baseToken(), address(swapHelper));
   }
 
   function setSwapHelper(uint poolIndex, ISwapHelper newSwapHelper) external onlyOwner {
@@ -129,43 +131,4 @@ contract StickyFactory is Ownable {
     return computedHash == root;
   }
 
-}
-
-contract StickyPool is ERC20 {
-  IPool public aavePool;
-  address public aToken;
-  address public baseToken;
-  address public factory;
-
-  constructor(
-    IPool _aavePool,
-    address _aToken,
-    address _baseToken
-  ) {
-    aavePool = _aavePool;
-    aToken = _aToken;
-    baseToken = _baseToken;
-    factory = msg.sender;
-  }
-
-  function mint(uint amountIn) external {
-    _mint(msg.sender, amountIn);
-    safeTransfer.invokeFrom(baseToken, msg.sender, address(this), amountIn);
-    ERC20(baseToken).approve(address(aavePool), amountIn);
-    aavePool.supply(baseToken, amountIn, address(this), 0);
-  }
-
-  function burn(uint amountOut) external {
-    _burn(msg.sender, amountOut);
-    aavePool.withdraw(baseToken, amountOut, msg.sender);
-  }
-
-  function interestAvailable() public view returns(uint) {
-    return ERC20(aToken).balanceOf(address(this)) - totalSupply;
-  }
-
-  function collectInterest() external {
-    require(msg.sender == factory);
-    aavePool.withdraw(baseToken, interestAvailable(), factory);
-  }
 }
