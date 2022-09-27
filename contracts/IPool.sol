@@ -2,7 +2,7 @@
 pragma solidity ^0.8.13;
 
 interface IPool {
-  function deposit(
+  function supply(
     address asset,
     uint256 amount,
     address onBehalfOf,

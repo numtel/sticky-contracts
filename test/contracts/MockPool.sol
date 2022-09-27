@@ -13,7 +13,7 @@ contract MockPool {
     aToken = _aToken;
   }
 
-  function deposit(
+  function supply(
     address asset,
     uint256 amount,
     address onBehalfOf,
@@ -29,6 +29,7 @@ contract MockPool {
     address to
   ) external returns (uint256) {
     underlying.transfer(to, amount);
+    aToken.burn(msg.sender, amount);
   }
   
 }

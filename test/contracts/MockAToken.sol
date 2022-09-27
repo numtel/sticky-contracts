@@ -23,6 +23,11 @@ contract MockAToken {
     //updateScaledSupply();
   }
 
+  function burn(address user, uint amount) external {
+    _balanceOf[user] -= (amount * scaleDenominator) / scaleNumerator;
+    totalSupply -= amount;
+  }
+
   function setScaleNumerator(uint newValue) external {
     scaleNumerator = newValue;
   }
