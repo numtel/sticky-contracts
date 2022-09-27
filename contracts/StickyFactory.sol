@@ -6,10 +6,15 @@ import "./IPool.sol";
 import "./Ownable.sol";
 import "./safeTransfer.sol";
 
+interface ISwapHelper {
+  function swap(address recipient) external;
+}
 
 contract StickyFactory is Ownable {
   StickyPool[] public pools;
+  ISwapHelper[] public poolSwappers;
   mapping(address => uint) public lastClaimedEpochOf;
+  ERC20 public rewardToken;
   bytes32[] public epochRoots;
   uint[] public epochTotals;
   uint[] public epochInterest;
@@ -22,50 +27,71 @@ contract StickyFactory is Ownable {
   }
 
   event OracleChanged(address indexed oldOracle, address indexed newOracle);
-  event NewPool(address indexed stickyPool, address indexed baseToken);
+  event RewardTokenChanged(address indexed oldRewardToken, address indexed newRewardToken);
+  event SwapHelperChanged(address indexed oldHelper, address indexed newHelper);
+  event NewPool(address indexed stickyPool, address indexed baseToken, address indexed swapHelper);
 
-  constructor() {
+  constructor(ERC20 _rewardToken) {
+    rewardToken = _rewardToken;
     _transferOwnership(msg.sender);
     oracle = msg.sender;
+  }
+
+  // Be sure to update all swapHelpers to match before initiating next epoch
+  function setRewardToken(ERC20 newRewardToken) external onlyOwner {
+    emit RewardTokenChanged(address(rewardToken), address(newRewardToken));
+    rewardToken = newRewardToken;
   }
 
   function createPool(
     IPool aavePool,
     address aToken,
-    address baseToken
+    address baseToken,
+    ISwapHelper swapHelper
   ) external onlyOwner {
     StickyPool newPool = new StickyPool(aavePool, aToken, baseToken);
     pools.push(newPool);
-    emit NewPool(address(newPool), baseToken);
+    poolSwappers.push(swapHelper);
+    emit NewPool(address(newPool), baseToken, address(swapHelper));
+  }
+
+  function setSwapHelper(uint poolIndex, ISwapHelper newSwapHelper) external onlyOwner {
+    emit SwapHelperChanged(address(poolSwappers[poolIndex]), address(newSwapHelper));
+    poolSwappers[poolIndex] = newSwapHelper;
   }
 
   function initiateEpoch(bytes32 epochRoot, uint epochTotal) external {
     require(msg.sender == oracle);
     epochRoots.push(epochRoot);
     epochTotals.push(epochTotal);
+
     // Swap each pool interest into rewards token
-    // TODO support multiple pools!
+    uint rewardBefore = rewardToken.balanceOf(address(this));
     for(uint i = 0; i<pools.length; i++) {
-      // TODO epochInterest should be in rewards token after swap!
-      epochInterest.push(pools[i].interestAvailable());
+      uint poolEarned = pools[i].interestAvailable();
       pools[i].collectInterest();
+      safeTransfer.invoke(pools[i].baseToken(), address(poolSwappers[i]), poolEarned);
+      poolSwappers[i].swap(address(this));
     }
+    epochInterest.push(rewardToken.balanceOf(address(this)) - rewardBefore);
   }
 
   function setOracleAccount(address newOracle) external onlyOwner {
     emit OracleChanged(oracle, newOracle);
     oracle = newOracle;
   }
+
   function claimReward(ClaimRewards[] memory claims) external {
     for(uint i = 0; i<claims.length; i++) {
       require(claimProofValid(msg.sender, claims[i]) == true);
       safeTransfer.invoke(
-        pools[i].baseToken(),
+        address(rewardToken),
         msg.sender,
         (claims[i].shareAmount * epochInterest[claims[i].epochIndex]) / epochTotals[claims[i].epochIndex]
       );
     }
   }
+
   function claimProofValid(address user, ClaimRewards memory claim) public view returns (bool) {
     bytes32 leaf = keccak256(abi.encodePacked(user, claim.shareAmount));
     return verify(epochRoots[claim.epochIndex], leaf, claim.proof);

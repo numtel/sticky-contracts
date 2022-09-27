@@ -5,17 +5,23 @@ const keccak256 = require('keccak256');
 exports.canInvestAndWithdraw = async function({
   web3, accounts, deployContract, loadContract, throws, BURN_ACCOUNT, increaseTime,
 }) {
+  const REWARD_RATIO = 3; // must be integer
   const mockToken = await deployContract(accounts[0], 'MockERC20');
+  const rewardToken = await deployContract(accounts[0], 'MockERC20');
+  const swapHelper = await deployContract(accounts[0], 'MockSwapHelper',
+    mockToken.options.address, rewardToken.options.address, REWARD_RATIO);
   const mockAToken = await deployContract(accounts[0], 'MockAToken', 10, 10);
   const mockPool = await deployContract(accounts[0], 'MockPool',
     mockToken.options.address, mockAToken.options.address);
 
-  const factory = await deployContract(accounts[0], 'StickyFactory');
+  const factory = await deployContract(accounts[0], 'StickyFactory',
+    rewardToken.options.address);
 
   const result = await factory.sendFrom(accounts[0]).createPool(
     mockPool.options.address,
     mockAToken.options.address,
-    mockToken.options.address
+    mockToken.options.address,
+    swapHelper.options.address
   );
   const pool = await loadContract('StickyPool', result.events.NewPool.returnValues.stickyPool);
 
@@ -56,8 +62,8 @@ exports.canInvestAndWithdraw = async function({
 
   // Interest was collected in factory
   assert.strictEqual(
-    Number(await mockToken.methods.balanceOf(factory.options.address).call()),
-    INVESTOR_AMOUNT * 0.1
+    Number(await rewardToken.methods.balanceOf(factory.options.address).call()),
+    INVESTOR_AMOUNT * 0.1 * REWARD_RATIO
   );
 
   for(let i = 0; i < leafData.length; i++) {
@@ -78,10 +84,13 @@ exports.canInvestAndWithdraw = async function({
 
     // Account balance equals the share of the earned interest
     assert.strictEqual(
-      Number(await mockToken.methods.balanceOf(leafData[i].acct).call()),
-      INVESTOR_AMOUNT * 0.1 * (leafData[i].share / epochTotal)
+      Number(await rewardToken.methods.balanceOf(leafData[i].acct).call()),
+      INVESTOR_AMOUNT * 0.1 * (leafData[i].share / epochTotal) * REWARD_RATIO
     );
   }
 
 }
 
+// TODO test setRewardToken, setSwapHelper
+// TODO test setOracleAccount
+// TODO test multiple epochs, pools
