@@ -10,6 +10,7 @@ interface ISwapHelper {
 }
 
 interface IStickyPool {
+  // TODO integrate swap helpers so that the base token doesn't matter
   function baseToken() external view returns(address);
   function interestAvailable() external view returns(uint);
   function collectInterest() external;
@@ -69,6 +70,7 @@ contract StickyFactory is Ownable {
 
     // Swap each pool interest into rewards token
     uint rewardBefore = rewardToken.balanceOf(address(this));
+    // TODO allow multiple pool subsets just in case we get too many for the block gas limit
     for(uint i = 0; i<pools.length; i++) {
       uint poolEarned = pools[i].interestAvailable();
       pools[i].collectInterest();
@@ -86,6 +88,8 @@ contract StickyFactory is Ownable {
   function claimReward(ClaimRewards[] memory claims) external {
     for(uint i = 0; i<claims.length; i++) {
       require(claimProofValid(msg.sender, claims[i]) == true);
+      require((claims[i].epochIndex + 1) > lastClaimedEpochOf[msg.sender]);
+      lastClaimedEpochOf[msg.sender] = claims[i].epochIndex + 1;
       safeTransfer.invoke(
         address(rewardToken),
         msg.sender,

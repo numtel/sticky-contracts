@@ -86,6 +86,13 @@ exports.canInvestAndWithdraw = async function({
       [0, leafData[i].share, tree.getHexProof(leaves[i])]
     ]);
 
+    // Cannot claim same epoch twice
+    assert.strictEqual(await throws(() =>
+      factory.sendFrom(leafData[i].acct).claimReward([
+        [0, leafData[i].share, tree.getHexProof(leaves[i])]
+      ])
+    ), true);
+
     // Account balance equals the share of the earned interest
     assert.strictEqual(
       Number(await rewardToken.methods.balanceOf(leafData[i].acct).call()),
