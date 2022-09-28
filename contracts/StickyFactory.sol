@@ -20,8 +20,11 @@ interface IStickyPool {
 }
 
 contract StickyFactory is Ownable {
+  // TODO switch to AddressSet? then pools can be removed?
   IStickyPool[] public pools;
+  // TODO switch to mapping on pool address?
   ISwapHelper[] public poolSwappers;
+  // TODO 2d mapping so epochs can be claimed randomly?
   mapping(address => uint) public lastClaimedEpochOf;
   IERC20 public rewardToken;
   bytes32[] public epochRoots;
@@ -89,8 +92,8 @@ contract StickyFactory is Ownable {
     // Swap each pool interest into rewards token
     uint rewardBefore = rewardToken.balanceOf(address(this));
 
-    if(poolCount > pools.length) {
-      poolCount = pools.length;
+    if(poolCount + poolStart > pools.length) {
+      poolCount = pools.length - poolStart;
     }
 
     for(uint i = poolStart; i<poolCount; i++) {

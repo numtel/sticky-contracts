@@ -113,3 +113,80 @@ exports.canInvestAndWithdraw = async function({
 // TODO test multiple epochs, pools
 // TODO test FactoryChanged
 // TODO test pool that earns interest in rewardToken
+
+exports.poolInterestIsReward = async function({
+  web3, accounts, deployContract, loadContract, throws, BURN_ACCOUNT, increaseTime,
+}) {
+  const mockToken = await deployContract(accounts[0], 'MockERC20');
+  const mockAToken = await deployContract(accounts[0], 'MockAToken', 10, 10);
+  const mockAavePool = await deployContract(accounts[0], 'MockPool',
+    mockToken.options.address, mockAToken.options.address);
+
+  const factory = await deployContract(accounts[0], 'StickyFactory',
+    mockToken.options.address);
+
+  const pool = await deployContract(accounts[0], 'StickyAavePool',
+    mockAavePool.options.address,
+    mockAToken.options.address,
+    mockToken.options.address,
+    factory.options.address,
+    'Sticky TEST Aave Pool',
+    'stickyTEST',
+  );
+
+  const result = await factory.sendFrom(accounts[0]).addPool(
+    pool.options.address,
+    BURN_ACCOUNT
+  );
+
+  const INVESTOR_AMOUNT = 10000;
+  await mockToken.sendFrom(accounts[0]).mint(accounts[0], INVESTOR_AMOUNT);
+  await mockToken.sendFrom(accounts[0]).approve(pool.options.address, INVESTOR_AMOUNT);
+  await pool.sendFrom(accounts[0]).mint(INVESTOR_AMOUNT);
+
+  await mockAToken.sendFrom(accounts[0]).setScaleNumerator(11);
+
+  const leafData = [
+    { acct: accounts[1], share: 100 },
+    { acct: accounts[2], share: 200 },
+    { acct: accounts[3], share: 300 },
+    { acct: accounts[4], share: 400 },
+  ];
+  const leaves = leafData.map(leaf => keccak256(
+    Buffer.from(web3.utils.encodePacked(
+      {value: leaf.acct, type:'address'},
+      {value: leaf.share, type:'uint256'}
+    ).slice(2), 'hex')
+  ));
+  const epochTotal = leafData.reduce((prev, cur) => prev + cur.share, 0);
+
+  // Generate the tree
+  const tree = new MerkleTree(leaves, keccak256, {sort:true});
+  const root = tree.getHexRoot();
+
+  // Publish the epoch merkle root
+  await factory.sendFrom(accounts[0]).defineEpoch(root, epochTotal);
+  await factory.sendFrom(accounts[0]).collectInterest(0, 0, 100);
+  // Called after finishing interest collection
+  const newEpochResult = await factory.sendFrom(accounts[0]).emitNewEpoch();
+  assert.strictEqual(Number(newEpochResult.events.NewEpoch.returnValues.interestEarned), INVESTOR_AMOUNT * 0.1);
+
+  // Interest was collected in factory
+  assert.strictEqual(
+    Number(await mockToken.methods.balanceOf(factory.options.address).call()),
+    INVESTOR_AMOUNT * 0.1
+  );
+
+  for(let i = 0; i < leafData.length; i++) {
+    await factory.sendFrom(leafData[i].acct).claimReward([
+      [0, leafData[i].share, tree.getHexProof(leaves[i])]
+    ]);
+
+    // Account balance equals the share of the earned interest
+    assert.strictEqual(
+      Number(await mockToken.methods.balanceOf(leafData[i].acct).call()),
+      INVESTOR_AMOUNT * 0.1 * (leafData[i].share / epochTotal)
+    );
+  }
+
+}
