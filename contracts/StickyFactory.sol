@@ -7,14 +7,15 @@ import "./safeTransfer.sol";
 import "./MerkleTree.sol";
 
 interface ISwapHelper {
+  // Must match the IStickyPool's interestToken
   function inputToken() external view returns(address);
+  // Must match rewardToken
   function outputToken() external view returns(address);
   function swap(address recipient) external;
 }
 
 interface IStickyPool {
   function interestToken() external view returns(address);
-  function interestAvailable() external view returns(uint);
   function collectInterest() external;
 }
 
@@ -26,6 +27,8 @@ contract StickyFactory is Ownable {
   bytes32[] public epochRoots;
   uint[] public epochTotals;
   uint[] public epochInterest;
+  // Oracle account initializes as contract creator
+  // but offers fine-grained access control only to epoch generation methods
   address public oracle;
 
   struct ClaimRewards {
@@ -91,12 +94,17 @@ contract StickyFactory is Ownable {
     }
 
     for(uint i = poolStart; i<poolCount; i++) {
-      require(poolSwappers[i].inputToken() == pools[i].interestToken(), 'POOL_MISMATCH');
-      require(poolSwappers[i].outputToken() == address(rewardToken), 'SWAP_MISMATCH');
-      uint poolEarned = pools[i].interestAvailable();
-      pools[i].collectInterest();
-      safeTransfer.invoke(pools[i].interestToken(), address(poolSwappers[i]), poolEarned);
-      poolSwappers[i].swap(address(this));
+      if(pools[i].interestToken() == address(rewardToken)) {
+        // Bypass swap logic if interest is earned in same token as rewards
+        pools[i].collectInterest();
+      } else {
+        require(poolSwappers[i].inputToken() == pools[i].interestToken(), 'POOL_MISMATCH');
+        require(poolSwappers[i].outputToken() == address(rewardToken), 'SWAP_MISMATCH');
+        uint balanceBefore = IERC20(pools[i].interestToken()).balanceOf(address(this));
+        pools[i].collectInterest();
+        safeTransfer.invoke(pools[i].interestToken(), address(poolSwappers[i]), IERC20(pools[i].interestToken()).balanceOf(address(this)) - balanceBefore);
+        poolSwappers[i].swap(address(this));
+      }
     }
     epochInterest[epochIndex] += rewardToken.balanceOf(address(this)) - rewardBefore;
   }

@@ -5,8 +5,9 @@ import "./ERC20.sol";
 import "./IERC20.sol";
 import "./IPool.sol";
 import "./safeTransfer.sol";
+import "./Ownable.sol";
 
-contract StickyAavePool is ERC20 {
+contract StickyAavePool is ERC20, Ownable {
   IPool public aavePool;
   address public aToken;
   address public baseToken;
@@ -15,6 +16,8 @@ contract StickyAavePool is ERC20 {
   string public name;
   string public symbol;
   uint8 public decimals;
+
+  event FactoryChanged(address indexed oldFactory, address indexed newFactory);
 
   constructor(
     IPool _aavePool,
@@ -31,6 +34,7 @@ contract StickyAavePool is ERC20 {
     name = _name;
     symbol = _symbol;
     decimals = IERC20(baseToken).decimals();
+    _transferOwnership(msg.sender);
   }
 
   function mint(uint amountIn) external {
@@ -51,6 +55,15 @@ contract StickyAavePool is ERC20 {
 
   function interestAvailable() public view returns(uint) {
     return ERC20(aToken).balanceOf(address(this)) - totalSupply;
+  }
+
+  function setFactory(address newFactory) external onlyOwner {
+    emit FactoryChanged(factory, newFactory);
+    factory = newFactory;
+  }
+
+  function transferOwnership(address newOwner) external onlyOwner {
+    _transferOwnership(newOwner);
   }
 
   function collectInterest() external {

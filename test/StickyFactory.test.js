@@ -111,3 +111,5 @@ exports.canInvestAndWithdraw = async function({
 // TODO test setRewardToken, setSwapHelper
 // TODO test setOracleAccount
 // TODO test multiple epochs, pools
+// TODO test FactoryChanged
+// TODO test pool that earns interest in rewardToken
