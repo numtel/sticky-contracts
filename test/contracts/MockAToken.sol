@@ -18,9 +18,8 @@ contract MockAToken {
   }
 
   function mint(address user, uint amount) external {
-    _balanceOf[user] += amount;
+    _balanceOf[user] += (amount * scaleDenominator) / scaleNumerator;
     totalSupply += amount;
-    //updateScaledSupply();
   }
 
   function burn(address user, uint amount) external {
@@ -32,16 +31,7 @@ contract MockAToken {
     scaleNumerator = newValue;
   }
 
-  function updateScaledSupply() internal {
-    scaledTotalSupply = (totalSupply * scaleNumerator) / scaleDenominator;
-  }
-
   function balanceOf(address user) external view returns (uint) {
-    return (_balanceOf[user] * scaleNumerator) / scaleDenominator;
-  }
-
-  // XXX nyi
-  function scaledBalanceOf(address user) external view returns (uint) {
     return (_balanceOf[user] * scaleNumerator) / scaleDenominator;
   }
 }

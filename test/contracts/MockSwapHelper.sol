@@ -20,6 +20,7 @@ contract MockSwapHelper {
 
   function swap(address recipient) external {
     uint amountIn = MockERC20(inputToken).balanceOf(address(this));
+    MockERC20(inputToken).transfer(address(0), amountIn);
     MockERC20(outputToken).mint(recipient, amountIn * ratio);
   }
 }
