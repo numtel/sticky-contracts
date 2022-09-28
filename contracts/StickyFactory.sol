@@ -4,6 +4,7 @@ pragma solidity ^0.8.13;
 import "./IERC20.sol";
 import "./Ownable.sol";
 import "./safeTransfer.sol";
+import "./MerkleTree.sol";
 
 interface ISwapHelper {
   function inputToken() external view returns(address);
@@ -116,39 +117,11 @@ contract StickyFactory is Ownable {
 
   function claimProofValid(address user, ClaimRewards memory claim) public view returns (bool) {
     bytes32 leaf = keccak256(abi.encodePacked(user, claim.shareAmount));
-    return verify(epochRoots[claim.epochIndex], leaf, claim.proof);
+    return MerkleTree.verify(epochRoots[claim.epochIndex], leaf, claim.proof);
   }
 
   function transferOwnership(address newOwner) external onlyOwner {
     _transferOwnership(newOwner);
-  }
-
-  // From https://github.com/miguelmota/merkletreejs-solidity
-  function verify(
-    bytes32 root,
-    bytes32 leaf,
-    bytes32[] memory proof
-  )
-    internal
-    pure
-    returns (bool)
-  {
-    bytes32 computedHash = leaf;
-
-    for (uint256 i = 0; i < proof.length; i++) {
-      bytes32 proofElement = proof[i];
-
-      if (computedHash <= proofElement) {
-        // Hash(current computed hash + current element of the proof)
-        computedHash = keccak256(abi.encodePacked(computedHash, proofElement));
-      } else {
-        // Hash(current element of the proof + current computed hash)
-        computedHash = keccak256(abi.encodePacked(proofElement, computedHash));
-      }
-    }
-
-    // Check if the computed hash (root) is equal to the provided root
-    return computedHash == root;
   }
 
 }
