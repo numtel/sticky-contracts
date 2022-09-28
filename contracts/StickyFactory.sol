@@ -38,6 +38,7 @@ contract StickyFactory is Ownable {
   event RewardTokenChanged(address indexed oldRewardToken, address indexed newRewardToken);
   event SwapHelperChanged(address indexed oldHelper, address indexed newHelper);
   event NewPool(address indexed stickyPool, address indexed interestToken, address indexed swapHelper);
+  event NewEpoch(uint epochIndex, uint interestEarned);
 
   constructor(IERC20 _rewardToken) {
     rewardToken = _rewardToken;
@@ -65,18 +66,21 @@ contract StickyFactory is Ownable {
     poolSwappers[poolIndex] = newSwapHelper;
   }
 
-  function defineEpoch(bytes32 epochRoot, uint epochTotal) external {
-    require(msg.sender == oracle);
+  function defineEpoch(bytes32 epochRoot, uint epochTotal) external onlyOracle {
     epochRoots.push(epochRoot);
     epochTotals.push(epochTotal);
     epochInterest.push(0);
+  }
+
+  function emitNewEpoch() external onlyOracle {
+    emit NewEpoch(epochRoots.length - 1, epochInterest[epochInterest.length - 1]);
   }
 
   // Perform interest swapping for a subset of pools,
   //  can never be too careful about the block gas limit
   // Generally, should always be collecting into the latest epoch,
   //  immediately after defining it
-  function collectInterest(uint epochIndex, uint poolStart, uint poolCount) external {
+  function collectInterest(uint epochIndex, uint poolStart, uint poolCount) external onlyOracle {
     require(msg.sender == oracle);
 
     // Swap each pool interest into rewards token
@@ -102,6 +106,9 @@ contract StickyFactory is Ownable {
     oracle = newOracle;
   }
 
+  // Claim from multiple epochs
+  //  but can never claim from earlier epochs after claiming a later one
+  //  so make sure to do claim in order!
   function claimReward(ClaimRewards[] memory claims) external {
     for(uint i = 0; i<claims.length; i++) {
       require(claimProofValid(msg.sender, claims[i]) == true);
@@ -122,6 +129,11 @@ contract StickyFactory is Ownable {
 
   function transferOwnership(address newOwner) external onlyOwner {
     _transferOwnership(newOwner);
+  }
+
+  modifier onlyOracle() {
+    require(oracle == msg.sender, "Caller is not oracle");
+    _;
   }
 
 }

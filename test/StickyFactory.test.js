@@ -64,6 +64,9 @@ exports.canInvestAndWithdraw = async function({
   // Publish the epoch merkle root
   await factory.sendFrom(accounts[0]).defineEpoch(root, epochTotal);
   await factory.sendFrom(accounts[0]).collectInterest(0, 0, 100);
+  // Called after finishing interest collection
+  const newEpochResult = await factory.sendFrom(accounts[0]).emitNewEpoch();
+  assert.strictEqual(Number(newEpochResult.events.NewEpoch.returnValues.interestEarned), INVESTOR_AMOUNT * 0.1 * REWARD_RATIO);
 
   // Interest was collected in factory
   assert.strictEqual(
