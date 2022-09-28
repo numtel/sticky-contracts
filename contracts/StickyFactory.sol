@@ -86,6 +86,8 @@ contract StickyFactory is Ownable {
     }
 
     for(uint i = poolStart; i<poolCount; i++) {
+      require(poolSwappers[i].inputToken() == pools[i].interestToken(), 'POOL_MISMATCH');
+      require(poolSwappers[i].outputToken() == address(rewardToken), 'SWAP_MISMATCH');
       uint poolEarned = pools[i].interestAvailable();
       pools[i].collectInterest();
       safeTransfer.invoke(pools[i].interestToken(), address(poolSwappers[i]), poolEarned);
