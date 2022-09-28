@@ -2,6 +2,7 @@
 pragma solidity ^0.8.13;
 
 import "./ERC20.sol";
+import "./IERC20.sol";
 import "./IPool.sol";
 import "./safeTransfer.sol";
 
@@ -11,16 +12,25 @@ contract StickyAavePool is ERC20 {
   address public baseToken;
   address public factory;
 
+  string public name;
+  string public symbol;
+  uint8 public decimals;
+
   constructor(
     IPool _aavePool,
     address _aToken,
     address _baseToken,
-    address _factory
+    address _factory,
+    string memory _name,
+    string memory _symbol
   ) {
     aavePool = _aavePool;
     aToken = _aToken;
     baseToken = _baseToken;
     factory = _factory;
+    name = _name;
+    symbol = _symbol;
+    decimals = IERC20(baseToken).decimals();
   }
 
   function mint(uint amountIn) external {

@@ -22,6 +22,8 @@ exports.canInvestAndWithdraw = async function({
     mockAToken.options.address,
     mockToken.options.address,
     factory.options.address,
+    'Sticky TEST Aave Pool',
+    'stickyTEST',
   );
 
   const result = await factory.sendFrom(accounts[0]).addPool(
