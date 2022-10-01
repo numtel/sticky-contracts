@@ -275,9 +275,6 @@ exports.changeRewardTokenAndOracle = async function({
 
 }
 
-// TODO test setOracleAccount
-// TODO test FactoryChanged
-
 exports.poolInterestIsReward = async function({
   web3, accounts, deployContract, loadContract, throws, BURN_ACCOUNT, increaseTime,
 }) {
@@ -293,7 +290,7 @@ exports.poolInterestIsReward = async function({
     mockAavePool.options.address,
     mockAToken.options.address,
     mockToken.options.address,
-    factory.options.address,
+    BURN_ACCOUNT,
     'Sticky TEST Aave Pool',
     'stickyTEST',
   );
@@ -330,6 +327,12 @@ exports.poolInterestIsReward = async function({
 
   // Publish the epoch merkle root
   await factory.sendFrom(accounts[0]).defineEpoch(root, epochTotal);
+
+  // Fails with incorrect factory setting
+  assert.strictEqual(await throws(() =>
+    factory.sendFrom(accounts[0]).collectInterest(0, 0, 100)), true);
+
+  await pool.sendFrom(accounts[0]).setFactory(factory.options.address);
   await factory.sendFrom(accounts[0]).collectInterest(0, 0, 100);
   // Called after finishing interest collection
   const newEpochResult = await factory.sendFrom(accounts[0]).emitNewEpoch();
