@@ -108,7 +108,7 @@ exports.canInvestAndWithdraw = async function({
 
 }
 
-exports.changeRewardToken = async function({
+exports.changeRewardTokenAndOracle = async function({
   web3, accounts, deployContract, loadContract, throws, BURN_ACCOUNT, increaseTime,
 }) {
   const REWARD_RATIO = 3; // must be integer
@@ -201,6 +201,8 @@ exports.changeRewardToken = async function({
 
   // Change the reward token
   await factory.sendFrom(accounts[0]).setRewardToken(rewardToken2.options.address);
+  // Change the oracle account
+  await factory.sendFrom(accounts[0]).setOracleAccount(accounts[1]);
   // Fake some interest generated
   const hiddenBalance = Number(await mockAToken.methods._balanceOf(pool.options.address).call());
   await mockAToken.sendFrom(accounts[0]).setScaleNumerator(13);
@@ -209,7 +211,12 @@ exports.changeRewardToken = async function({
 
   // Publish the epoch merkle root
   const epochCount = await factory.methods.epochCount().call();
-  await factory.sendFrom(accounts[0]).defineEpoch(root2, epochTotal2);
+  // Fails from old oracle
+  assert.strictEqual(await throws(() =>
+    factory.sendFrom(accounts[0]).defineEpoch(root2, epochTotal2)), true);
+
+  // Succeeds from new oracle
+  await factory.sendFrom(accounts[1]).defineEpoch(root2, epochTotal2);
 
   // Need to update swapHelper to match the new reward token
   assert.strictEqual(await throws(() =>
@@ -225,11 +232,17 @@ exports.changeRewardToken = async function({
     swapHelper2.options.address
   );
 
+  // Fails from old oracle
+  assert.strictEqual(await throws(() =>
+    factory.sendFrom(accounts[0]).collectInterest(epochCount, 0, 100)), true);
   // Interest collection now succeeds
-  await factory.sendFrom(accounts[0]).collectInterest(epochCount, 0, 100)
+  await factory.sendFrom(accounts[1]).collectInterest(epochCount, 0, 100);
 
+  // Fails from old oracle
+  assert.strictEqual(await throws(() =>
+    factory.sendFrom(accounts[0]).emitNewEpoch()), true);
   // Called after finishing interest collection
-  const newEpochResult2 = await factory.sendFrom(accounts[0]).emitNewEpoch();
+  const newEpochResult2 = await factory.sendFrom(accounts[1]).emitNewEpoch();
   assert.strictEqual(newEpochResult2.events.NewEpoch.returnValues.rewardToken, rewardToken2.options.address);
   assert.strictEqual(Number(newEpochResult2.events.NewEpoch.returnValues.interestEarned), (poolTotal - INVESTOR_AMOUNT) * REWARD_RATIO2);
 
