@@ -88,6 +88,10 @@ contract StickyFactory is Ownable {
     );
   }
 
+  function epochCount() external view returns(uint) {
+    return epochs.length;
+  }
+
   // Perform interest swapping for a subset of pools,
   //  can never be too careful about the block gas limit
   // Generally, should always be collecting into the latest epoch,
@@ -128,11 +132,11 @@ contract StickyFactory is Ownable {
   //  so make sure to do claim in order!
   function claimReward(ClaimRewards[] memory claims) external {
     for(uint i = 0; i<claims.length; i++) {
-      require(claimProofValid(msg.sender, claims[i]) == true);
-      require((claims[i].epochIndex + 1) > lastClaimedEpochOf[msg.sender]);
+      require(claimProofValid(msg.sender, claims[i]) == true, "INVALID_PROOF");
+      require((claims[i].epochIndex + 1) > lastClaimedEpochOf[msg.sender], "CLAIM_PASSED");
       lastClaimedEpochOf[msg.sender] = claims[i].epochIndex + 1;
       safeTransfer.invoke(
-        address(rewardToken),
+        address(epochs[claims[i].epochIndex].rewardToken),
         msg.sender,
         (claims[i].shareAmount * epochs[claims[i].epochIndex].rewardTotal) / epochs[claims[i].epochIndex].shareTotal
       );
