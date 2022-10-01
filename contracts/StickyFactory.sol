@@ -27,9 +27,13 @@ contract StickyFactory is Ownable {
   // TODO 2d mapping so epochs can be claimed randomly?
   mapping(address => uint) public lastClaimedEpochOf;
   IERC20 public rewardToken;
-  bytes32[] public epochRoots;
-  uint[] public epochTotals;
-  uint[] public epochInterest;
+  struct EpochDetails {
+    uint shareTotal;
+    bytes32 merkleRoot;
+    uint rewardTotal;
+    IERC20 rewardToken;
+  }
+  EpochDetails[] public epochs;
   // Oracle account initializes as contract creator
   // but offers fine-grained access control only to epoch generation methods
   address public oracle;
@@ -44,7 +48,7 @@ contract StickyFactory is Ownable {
   event RewardTokenChanged(address indexed oldRewardToken, address indexed newRewardToken);
   event SwapHelperChanged(address indexed oldHelper, address indexed newHelper);
   event NewPool(address indexed stickyPool, address indexed interestToken, address indexed swapHelper);
-  event NewEpoch(uint epochIndex, uint interestEarned);
+  event NewEpoch(uint epochIndex, uint interestEarned, address indexed rewardToken);
 
   constructor(IERC20 _rewardToken) {
     rewardToken = _rewardToken;
@@ -73,13 +77,15 @@ contract StickyFactory is Ownable {
   }
 
   function defineEpoch(bytes32 epochRoot, uint epochTotal) external onlyOracle {
-    epochRoots.push(epochRoot);
-    epochTotals.push(epochTotal);
-    epochInterest.push(0);
+    epochs.push(EpochDetails(epochTotal, epochRoot, 0, rewardToken));
   }
 
   function emitNewEpoch() external onlyOracle {
-    emit NewEpoch(epochRoots.length - 1, epochInterest[epochInterest.length - 1]);
+    emit NewEpoch(
+      epochs.length - 1,
+      epochs[epochs.length - 1].rewardTotal,
+      address(epochs[epochs.length - 1].rewardToken)
+    );
   }
 
   // Perform interest swapping for a subset of pools,
@@ -90,26 +96,26 @@ contract StickyFactory is Ownable {
     require(msg.sender == oracle);
 
     // Swap each pool interest into rewards token
-    uint rewardBefore = rewardToken.balanceOf(address(this));
+    uint rewardBefore = epochs[epochIndex].rewardToken.balanceOf(address(this));
 
     if(poolCount + poolStart > pools.length) {
       poolCount = pools.length - poolStart;
     }
 
     for(uint i = poolStart; i<poolCount; i++) {
-      if(pools[i].interestToken() == address(rewardToken)) {
+      if(pools[i].interestToken() == address(epochs[epochIndex].rewardToken)) {
         // Bypass swap logic if interest is earned in same token as rewards
         pools[i].collectInterest();
       } else {
         require(poolSwappers[i].inputToken() == pools[i].interestToken(), 'POOL_MISMATCH');
-        require(poolSwappers[i].outputToken() == address(rewardToken), 'SWAP_MISMATCH');
+        require(poolSwappers[i].outputToken() == address(epochs[epochIndex].rewardToken), 'SWAP_MISMATCH');
         uint balanceBefore = IERC20(pools[i].interestToken()).balanceOf(address(this));
         pools[i].collectInterest();
         safeTransfer.invoke(pools[i].interestToken(), address(poolSwappers[i]), IERC20(pools[i].interestToken()).balanceOf(address(this)) - balanceBefore);
         poolSwappers[i].swap(address(this));
       }
     }
-    epochInterest[epochIndex] += rewardToken.balanceOf(address(this)) - rewardBefore;
+    epochs[epochIndex].rewardTotal += epochs[epochIndex].rewardToken.balanceOf(address(this)) - rewardBefore;
   }
 
   function setOracleAccount(address newOracle) external onlyOwner {
@@ -128,14 +134,14 @@ contract StickyFactory is Ownable {
       safeTransfer.invoke(
         address(rewardToken),
         msg.sender,
-        (claims[i].shareAmount * epochInterest[claims[i].epochIndex]) / epochTotals[claims[i].epochIndex]
+        (claims[i].shareAmount * epochs[claims[i].epochIndex].rewardTotal) / epochs[claims[i].epochIndex].shareTotal
       );
     }
   }
 
   function claimProofValid(address user, ClaimRewards memory claim) public view returns (bool) {
     bytes32 leaf = keccak256(abi.encodePacked(user, claim.shareAmount));
-    return MerkleTree.verify(epochRoots[claim.epochIndex], leaf, claim.proof);
+    return MerkleTree.verify(epochs[claim.epochIndex].merkleRoot, leaf, claim.proof);
   }
 
   function transferOwnership(address newOwner) external onlyOwner {
