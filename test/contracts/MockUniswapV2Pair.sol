@@ -27,11 +27,11 @@ contract MockUniswapV2Pair {
     token1.transfer(address(0), amount1In);
     if(amount0Out > 0) {
       uint out = (amount1In * price1) / price0;
-      require(out >= amount0Out);
+      require(out >= amount0Out, "TOO_MUCH_SLIPPAGE");
       token0.mint(to, out);
     } else {
       uint out = (amount0In * price0) / price1;
-      require(out >= amount1Out);
+      require(out >= amount1Out, "TOO_MUCH_SLIPPAGE");
       token1.mint(to, out);
     }
   }

@@ -56,10 +56,20 @@ contract UniswapV2Helper {
   }
 
   function swap(address recipient) external {
-    uint amountIn = IERC20(inputToken).balanceOf(address(this));
+    IERC20 input = IERC20(inputToken);
+    IERC20 output = IERC20(outputToken);
+    uint amountIn = input.balanceOf(address(this));
     uint minOut =
       (amountIn * inputPriceFeed.latestAnswer() * slippageNumerator)
       / (outputPriceFeed.latestAnswer() * slippageDenominator);
+
+    uint8 inputDecimals = input.decimals();
+    uint8 outputDecimals = output.decimals();
+    if(inputDecimals > outputDecimals) {
+      minOut /= 10**(inputDecimals - outputDecimals);
+    } else if(inputDecimals < outputDecimals) {
+      minOut *= 10**(inputDecimals - outputDecimals);
+    }
 
     safeTransfer.invoke(inputToken, address(liquidityPool), amountIn);
     if(inputIsToken0) {
