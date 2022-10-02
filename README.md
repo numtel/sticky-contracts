@@ -39,7 +39,24 @@ $ npm test
 
 ## Initiating a new epoch
 
-Coming soon...
+Must have `sticky-oracle.json` configuration file in parent directory of repository.
+
+Building the contracts is not required since the `StickyFactory.abi` is included in the `utils` directory.
+
+The epoch data is in a JSON file with an object using the reward recipient as the key and the relative reward share as the value.
+
+```
+{
+  "0x182dA9ECA9234A4c67E2355534c368e707DF8911": 100, // Receive 1/3 of reward
+  "0x10EAa49CA7BE989331fF360EB9C74438393AA7B7": 200  // Receive 2/3 or reward
+}
+```
+
+Invoke the script:
+
+```
+$ npm run epoch utils/exampleEpoch.json
+```
 
 ## License
 
