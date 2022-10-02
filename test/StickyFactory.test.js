@@ -210,7 +210,7 @@ exports.changeRewardTokenAndOracle = async function({
   const poolTotal = Math.floor(hiddenBalance * 13 / 10);
 
   // Publish the epoch merkle root
-  const epochCount = await factory.methods.epochCount().call();
+  const epochCount = await factory.methods.epochsCount().call();
   // Fails from old oracle
   assert.strictEqual(await throws(() =>
     factory.sendFrom(accounts[0]).defineEpoch(root2, epochTotal2)), true);

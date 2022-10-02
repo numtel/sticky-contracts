@@ -88,8 +88,12 @@ contract StickyFactory is Ownable {
     );
   }
 
-  function epochCount() external view returns(uint) {
+  function epochsCount() external view returns(uint) {
     return epochs.length;
+  }
+
+  function poolsCount() external view returns(uint) {
+    return pools.length;
   }
 
   // Perform interest swapping for a subset of pools,
