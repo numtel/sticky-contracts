@@ -4,7 +4,7 @@
 
 Contract | Deployed
 ---------|-----------------
-factory |  [0xCA36208034a68974224e9942c106828beAb30308](https://polygonscan.com/address/0xCA36208034a68974224e9942c106828beAb30308)
+factory |  [0x85f14ebccb8311e8213ad65fbea8a3d3c3acfaae](https://polygonscan.com/address/0x85f14ebccb8311e8213ad65fbea8a3d3c3acfaae)
 usdcPool |  [0x9eDC68A520A727076dc8Cc612Fed5018AB9df6BA](https://polygonscan.com/address/0x9eDC68A520A727076dc8Cc612Fed5018AB9df6BA)
 usdtPool |  [0x79699bBa3051B246B9C12F1489676b5008fAB180](https://polygonscan.com/address/0x79699bBa3051B246B9C12F1489676b5008fAB180)
 usdtHelper |  [0xff7ad69E5F44FD727a139A6CBcf32936051EDbDD](https://polygonscan.com/address/0xff7ad69E5F44FD727a139A6CBcf32936051EDbDD)

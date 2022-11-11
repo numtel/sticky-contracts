@@ -4,7 +4,6 @@ pragma solidity ^0.8.13;
 import "./IERC20.sol";
 import "./Ownable.sol";
 import "./safeTransfer.sol";
-import "./MerkleTree.sol";
 
 interface ISwapHelper {
   // Must match the IStickyPool's interestToken
@@ -24,25 +23,22 @@ contract StickyFactory is Ownable {
   IStickyPool[] public pools;
   // TODO switch to mapping on pool address?
   ISwapHelper[] public poolSwappers;
-  // TODO 2d mapping so epochs can be claimed randomly?
-  mapping(address => uint) public lastClaimedEpochOf;
+
   IERC20 public rewardToken;
   struct EpochDetails {
-    uint shareTotal;
-    bytes32 merkleRoot;
     uint rewardTotal;
     IERC20 rewardToken;
   }
   EpochDetails[] public epochs;
+
+  struct Reward {
+    address recipient;
+    uint amount;
+  }
+
   // Oracle account initializes as contract creator
   // but offers fine-grained access control only to epoch generation methods
   address public oracle;
-
-  struct ClaimRewards {
-    uint epochIndex;
-    uint shareAmount;
-    bytes32[] proof;
-  }
 
   event OracleChanged(address indexed oldOracle, address indexed newOracle);
   event RewardTokenChanged(address indexed oldRewardToken, address indexed newRewardToken);
@@ -76,8 +72,8 @@ contract StickyFactory is Ownable {
     poolSwappers[poolIndex] = newSwapHelper;
   }
 
-  function defineEpoch(bytes32 epochRoot, uint epochTotal) external onlyOracle {
-    epochs.push(EpochDetails(epochTotal, epochRoot, 0, rewardToken));
+  function defineEpoch() external onlyOracle {
+    epochs.push(EpochDetails(0, rewardToken));
   }
 
   function emitNewEpoch() external onlyOracle {
@@ -126,30 +122,15 @@ contract StickyFactory is Ownable {
     epochs[epochIndex].rewardTotal += epochs[epochIndex].rewardToken.balanceOf(address(this)) - rewardBefore;
   }
 
-  function setOracleAccount(address newOracle) external onlyOwner {
-    emit OracleChanged(oracle, newOracle);
-    oracle = newOracle;
-  }
-
-  // Claim from multiple epochs
-  //  but can never claim from earlier epochs after claiming a later one
-  //  so make sure to do claim in order!
-  function claimReward(ClaimRewards[] memory claims) external {
-    for(uint i = 0; i<claims.length; i++) {
-      require(claimProofValid(msg.sender, claims[i]) == true, "INVALID_PROOF");
-      require((claims[i].epochIndex + 1) > lastClaimedEpochOf[msg.sender], "CLAIM_PASSED");
-      lastClaimedEpochOf[msg.sender] = claims[i].epochIndex + 1;
-      safeTransfer.invoke(
-        address(epochs[claims[i].epochIndex].rewardToken),
-        msg.sender,
-        (claims[i].shareAmount * epochs[claims[i].epochIndex].rewardTotal) / epochs[claims[i].epochIndex].shareTotal
-      );
+  function distributeInterest(address token, Reward[] memory transfers) external onlyOracle {
+    for(uint i = 0; i<transfers.length; i++) {
+      safeTransfer.invoke(token, transfers[i].recipient, transfers[i].amount);
     }
   }
 
-  function claimProofValid(address user, ClaimRewards memory claim) public view returns (bool) {
-    bytes32 leaf = keccak256(abi.encodePacked(user, claim.shareAmount));
-    return MerkleTree.verify(epochs[claim.epochIndex].merkleRoot, leaf, claim.proof);
+  function setOracleAccount(address newOracle) external onlyOwner {
+    emit OracleChanged(oracle, newOracle);
+    oracle = newOracle;
   }
 
   function transferOwnership(address newOwner) external onlyOwner {

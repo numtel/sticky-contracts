@@ -45,64 +45,38 @@ exports.canInvestAndWithdraw = async function({
   assert.strictEqual(Number(await mockAToken.methods.balanceOf(pool.options.address).call()), INVESTOR_AMOUNT * 1.1);
   assert.strictEqual(Number(await pool.methods.interestAvailable().call()), INVESTOR_AMOUNT * 0.1);
 
-  const leafData = [
+  const rewardData = [
     { acct: accounts[1], share: 100 },
     { acct: accounts[2], share: 200 },
     { acct: accounts[3], share: 300 },
     { acct: accounts[4], share: 400 },
   ];
-  const leaves = leafData.map(leaf => keccak256(
-    Buffer.from(web3.utils.encodePacked(
-      {value: leaf.acct, type:'address'},
-      {value: leaf.share, type:'uint256'}
-    ).slice(2), 'hex')
-  ));
-  const epochTotal = leafData.reduce((prev, cur) => prev + cur.share, 0);
+  const epochTotal = rewardData.reduce((prev, cur) => prev + cur.share, 0);
 
-  // Generate the tree
-  const tree = new MerkleTree(leaves, keccak256, {sort:true});
-  const root = tree.getHexRoot();
-
-  // Publish the epoch merkle root
-  await factory.sendFrom(accounts[0]).defineEpoch(root, epochTotal);
+  // Create the epoch
+  await factory.sendFrom(accounts[0]).defineEpoch();
   await factory.sendFrom(accounts[0]).collectInterest(0, 0, 100);
   // Called after finishing interest collection
   const newEpochResult = await factory.sendFrom(accounts[0]).emitNewEpoch();
-  assert.strictEqual(Number(newEpochResult.events.NewEpoch.returnValues.interestEarned), INVESTOR_AMOUNT * 0.1 * REWARD_RATIO);
+  const expectedInterest = INVESTOR_AMOUNT * 0.1 * REWARD_RATIO;
+  assert.strictEqual(Number(newEpochResult.events.NewEpoch.returnValues.interestEarned), expectedInterest);
 
   // Interest was collected in factory
   assert.strictEqual(
     Number(await rewardToken.methods.balanceOf(factory.options.address).call()),
-    INVESTOR_AMOUNT * 0.1 * REWARD_RATIO
+    expectedInterest
   );
 
-  for(let i = 0; i < leafData.length; i++) {
-    // Claim is valid with the correct share value
-    assert.strictEqual(await factory.methods.claimProofValid(
-      leafData[i].acct,
-      [0, leafData[i].share, tree.getHexProof(leaves[i])]
-    ).call(), true);
-    // Claim fails when the share value does not match
-    assert.strictEqual(await factory.methods.claimProofValid(
-      leafData[i].acct,
-      [0, leafData[i].share*2, tree.getHexProof(leaves[i])]
-    ).call(), false);
+  await factory.sendFrom(accounts[0]).distributeInterest(
+    rewardToken.options.address,
+    rewardData.map(item =>
+      [ item.acct, item.share * expectedInterest / epochTotal ]));
 
-    await factory.sendFrom(leafData[i].acct).claimReward([
-      [0, leafData[i].share, tree.getHexProof(leaves[i])]
-    ]);
-
-    // Cannot claim same epoch twice
-    assert.strictEqual(await throws(() =>
-      factory.sendFrom(leafData[i].acct).claimReward([
-        [0, leafData[i].share, tree.getHexProof(leaves[i])]
-      ])
-    ), true);
-
+  for(let i = 0; i < rewardData.length; i++) {
     // Account balance equals the share of the earned interest
     assert.strictEqual(
-      Number(await rewardToken.methods.balanceOf(leafData[i].acct).call()),
-      INVESTOR_AMOUNT * 0.1 * (leafData[i].share / epochTotal) * REWARD_RATIO
+      Number(await rewardToken.methods.balanceOf(rewardData[i].acct).call()),
+      INVESTOR_AMOUNT * 0.1 * (rewardData[i].share / epochTotal) * REWARD_RATIO
     );
   }
 
@@ -161,20 +135,9 @@ exports.changeRewardTokenAndOracle = async function({
     { acct: accounts[3], share: 300 },
     { acct: accounts[4], share: 400 },
   ];
-  const leaves = leafData.map(leaf => keccak256(
-    Buffer.from(web3.utils.encodePacked(
-      {value: leaf.acct, type:'address'},
-      {value: leaf.share, type:'uint256'}
-    ).slice(2), 'hex')
-  ));
   const epochTotal = leafData.reduce((prev, cur) => prev + cur.share, 0);
 
-  // Generate the tree
-  const tree = new MerkleTree(leaves, keccak256, {sort:true});
-  const root = tree.getHexRoot();
-
-  // Publish the epoch merkle root
-  await factory.sendFrom(accounts[0]).defineEpoch(root, epochTotal);
+  await factory.sendFrom(accounts[0]).defineEpoch();
   await factory.sendFrom(accounts[0]).collectInterest(0, 0, 100);
   // Called after finishing interest collection
   const newEpochResult = await factory.sendFrom(accounts[0]).emitNewEpoch();
@@ -187,17 +150,7 @@ exports.changeRewardTokenAndOracle = async function({
     { acct: accounts[3], share: 302 },
     { acct: accounts[4], share: 401 },
   ];
-  const leaves2 = leafData2.map(leaf => keccak256(
-    Buffer.from(web3.utils.encodePacked(
-      {value: leaf.acct, type:'address'},
-      {value: leaf.share, type:'uint256'}
-    ).slice(2), 'hex')
-  ));
   const epochTotal2 = leafData2.reduce((prev, cur) => prev + cur.share, 0);
-
-  // Generate the tree
-  const tree2 = new MerkleTree(leaves2, keccak256, {sort:true});
-  const root2 = tree2.getHexRoot();
 
   // Change the reward token
   await factory.sendFrom(accounts[0]).setRewardToken(rewardToken2.options.address);
@@ -209,14 +162,13 @@ exports.changeRewardTokenAndOracle = async function({
   // This is conforming to the MockAToken
   const poolTotal = Math.floor(hiddenBalance * 13 / 10);
 
-  // Publish the epoch merkle root
   const epochCount = await factory.methods.epochsCount().call();
   // Fails from old oracle
   assert.strictEqual(await throws(() =>
-    factory.sendFrom(accounts[0]).defineEpoch(root2, epochTotal2)), true);
+    factory.sendFrom(accounts[0]).defineEpoch()), true);
 
   // Succeeds from new oracle
-  await factory.sendFrom(accounts[1]).defineEpoch(root2, epochTotal2);
+  await factory.sendFrom(accounts[1]).defineEpoch();
 
   // Need to update swapHelper to match the new reward token
   assert.strictEqual(await throws(() =>
@@ -247,21 +199,28 @@ exports.changeRewardTokenAndOracle = async function({
   assert.strictEqual(Number(newEpochResult2.events.NewEpoch.returnValues.interestEarned), (poolTotal - INVESTOR_AMOUNT) * REWARD_RATIO2);
 
   // Interest was collected in factory
+  const rewardTokenExpected = INVESTOR_AMOUNT * 0.1 * REWARD_RATIO;
+  const rewardToken2Expected = (poolTotal - INVESTOR_AMOUNT) * REWARD_RATIO2;
+
   assert.strictEqual(
     Number(await rewardToken.methods.balanceOf(factory.options.address).call()),
-    INVESTOR_AMOUNT * 0.1 * REWARD_RATIO
+    rewardTokenExpected
   );
   assert.strictEqual(
     Number(await rewardToken2.methods.balanceOf(factory.options.address).call()),
-    (poolTotal - INVESTOR_AMOUNT) * REWARD_RATIO2
+    rewardToken2Expected
   );
 
-  for(let i = 0; i < leafData.length; i++) {
-    await factory.sendFrom(leafData[i].acct).claimReward([
-      [0, leafData[i].share, tree.getHexProof(leaves[i])],
-      [1, leafData2[i].share, tree2.getHexProof(leaves2[i])]
-    ]);
+  await factory.sendFrom(accounts[1]).distributeInterest(
+    rewardToken.options.address,
+    leafData.map(item =>
+      [ item.acct, Math.floor(item.share * rewardTokenExpected / epochTotal) ]));
+  await factory.sendFrom(accounts[1]).distributeInterest(
+    rewardToken2.options.address,
+    leafData2.map(item =>
+      [ item.acct, Math.floor(item.share * rewardToken2Expected / epochTotal2) ]));
 
+  for(let i = 0; i < leafData.length; i++) {
     // Account balance equals the share of the earned interest
     assert.strictEqual(
       Number(await rewardToken.methods.balanceOf(leafData[i].acct).call()),
@@ -313,20 +272,9 @@ exports.poolInterestIsReward = async function({
     { acct: accounts[3], share: 300 },
     { acct: accounts[4], share: 400 },
   ];
-  const leaves = leafData.map(leaf => keccak256(
-    Buffer.from(web3.utils.encodePacked(
-      {value: leaf.acct, type:'address'},
-      {value: leaf.share, type:'uint256'}
-    ).slice(2), 'hex')
-  ));
   const epochTotal = leafData.reduce((prev, cur) => prev + cur.share, 0);
 
-  // Generate the tree
-  const tree = new MerkleTree(leaves, keccak256, {sort:true});
-  const root = tree.getHexRoot();
-
-  // Publish the epoch merkle root
-  await factory.sendFrom(accounts[0]).defineEpoch(root, epochTotal);
+  await factory.sendFrom(accounts[0]).defineEpoch();
 
   // Fails with incorrect factory setting
   assert.strictEqual(await throws(() =>
@@ -339,20 +287,22 @@ exports.poolInterestIsReward = async function({
   assert.strictEqual(Number(newEpochResult.events.NewEpoch.returnValues.interestEarned), INVESTOR_AMOUNT * 0.1);
 
   // Interest was collected in factory
+  const expectedInterest = INVESTOR_AMOUNT * 0.1;
   assert.strictEqual(
     Number(await mockToken.methods.balanceOf(factory.options.address).call()),
-    INVESTOR_AMOUNT * 0.1
+    expectedInterest
   );
 
-  for(let i = 0; i < leafData.length; i++) {
-    await factory.sendFrom(leafData[i].acct).claimReward([
-      [0, leafData[i].share, tree.getHexProof(leaves[i])]
-    ]);
+  await factory.sendFrom(accounts[0]).distributeInterest(
+    mockToken.options.address,
+    leafData.map(item =>
+      [ item.acct, Math.floor(item.share * expectedInterest / epochTotal) ]));
 
+  for(let i = 0; i < leafData.length; i++) {
     // Account balance equals the share of the earned interest
     assert.strictEqual(
       Number(await mockToken.methods.balanceOf(leafData[i].acct).call()),
-      INVESTOR_AMOUNT * 0.1 * (leafData[i].share / epochTotal)
+      expectedInterest * (leafData[i].share / epochTotal)
     );
   }
 
@@ -429,25 +379,16 @@ exports.multipleEpochsAndPools = async function({
     { acct: accounts[3], share: 300 },
     { acct: accounts[4], share: 400 },
   ];
-  const leaves = leafData.map(leaf => keccak256(
-    Buffer.from(web3.utils.encodePacked(
-      {value: leaf.acct, type:'address'},
-      {value: leaf.share, type:'uint256'}
-    ).slice(2), 'hex')
-  ));
   const epochTotal = leafData.reduce((prev, cur) => prev + cur.share, 0);
 
-  // Generate the tree
-  const tree = new MerkleTree(leaves, keccak256, {sort:true});
-  const root = tree.getHexRoot();
-
-  // Publish the epoch merkle root
-  await factory.sendFrom(accounts[0]).defineEpoch(root, epochTotal);
+  await factory.sendFrom(accounts[0]).defineEpoch();
   await factory.sendFrom(accounts[0]).collectInterest(0, 0, 100);
+  const expectedInterest1 =
+    (INVESTOR_AMOUNT * 0.1 * REWARD_RATIO1) + (INVESTOR_AMOUNT * 0.2 * REWARD_RATIO2);
   // Called after finishing interest collection
   const newEpochResult = await factory.sendFrom(accounts[0]).emitNewEpoch();
   assert.strictEqual(Number(newEpochResult.events.NewEpoch.returnValues.interestEarned),
-    (INVESTOR_AMOUNT * 0.1 * REWARD_RATIO1) + (INVESTOR_AMOUNT * 0.2 * REWARD_RATIO2));
+    expectedInterest1);
 
   // Make a second epoch
   const hiddenBalance = Number(await mockAToken.methods._balanceOf(pool.options.address).call());
@@ -470,41 +411,35 @@ exports.multipleEpochsAndPools = async function({
     { acct: accounts[3], share: 20 },
     { acct: accounts[4], share: 10 },
   ];
-  const leaves2 = leafData2.map(leaf => keccak256(
-    Buffer.from(web3.utils.encodePacked(
-      {value: leaf.acct, type:'address'},
-      {value: leaf.share, type:'uint256'}
-    ).slice(2), 'hex')
-  ));
   const epochTotal2 = leafData2.reduce((prev, cur) => prev + cur.share, 0);
 
-  // Generate the second tree
-  const tree2 = new MerkleTree(leaves2, keccak256, {sort:true});
-  const root2 = tree2.getHexRoot();
-
-  //Publish the second epoch
-  await factory.sendFrom(accounts[0]).defineEpoch(root2, epochTotal2);
+  await factory.sendFrom(accounts[0]).defineEpoch();
   await factory.sendFrom(accounts[0]).collectInterest(1, 0, 100);
+  const expectedInterest2 =
+    ((pool1Total - INVESTOR_AMOUNT) * REWARD_RATIO1) + ((pool2Total - INVESTOR_AMOUNT) * REWARD_RATIO2);
   // Called after finishing interest collection
   const newEpochResult2 = await factory.sendFrom(accounts[0]).emitNewEpoch();
   assert.strictEqual(Number(newEpochResult2.events.NewEpoch.returnValues.interestEarned),
-    ((pool1Total - INVESTOR_AMOUNT) * REWARD_RATIO1) + ((pool2Total - INVESTOR_AMOUNT) * REWARD_RATIO2));
+    expectedInterest2);
+
+  const rewards = leafData.map((_, i) => Math.floor(
+    ((INVESTOR_AMOUNT * 0.1 * REWARD_RATIO1) + (INVESTOR_AMOUNT * 0.2 * REWARD_RATIO2))
+      * (leafData[i].share / epochTotal) +
+    Math.floor(
+      (((pool1Total - INVESTOR_AMOUNT) * REWARD_RATIO1) + ((pool2Total - INVESTOR_AMOUNT) * REWARD_RATIO2))
+        * (leafData2[i].share / epochTotal2)
+    )
+   ));
+
+  await factory.sendFrom(accounts[0]).distributeInterest(
+    rewardToken.options.address,
+    leafData.map((item, i) => [ item.acct, rewards[i] ]));
 
   for(let i = 0; i < leafData.length; i++) {
-    await factory.sendFrom(leafData[i].acct).claimReward([
-      [0, leafData[i].share, tree.getHexProof(leaves[i])],
-      [1, leafData2[i].share, tree2.getHexProof(leaves2[i])]
-    ]);
-
     // Account balance equals the share of the earned interest
     assert.strictEqual(
       Number(await rewardToken.methods.balanceOf(leafData[i].acct).call()),
-      ((INVESTOR_AMOUNT * 0.1 * REWARD_RATIO1) + (INVESTOR_AMOUNT * 0.2 * REWARD_RATIO2))
-        * (leafData[i].share / epochTotal) +
-      Math.floor(
-        (((pool1Total - INVESTOR_AMOUNT) * REWARD_RATIO1) + ((pool2Total - INVESTOR_AMOUNT) * REWARD_RATIO2))
-          * (leafData2[i].share / epochTotal2)
-      )
+      rewards[i]
     );
   }
 
